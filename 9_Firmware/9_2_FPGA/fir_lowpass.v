@@ -117,8 +117,11 @@ always @(posedge clk or negedge reset_n) begin
         end
     end else if (valid_pipe[0]) begin
         for (i = 0; i < 16; i = i + 1) begin
-            add_l0[i] <= {{(ACCUM_WIDTH-DATA_WIDTH-COEFF_WIDTH){mult_result[2*i][DATA_WIDTH+COEFF_WIDTH-1]}}, mult_result[2*i]} +
-                          {{(ACCUM_WIDTH-DATA_WIDTH-COEFF_WIDTH){mult_result[2*i+1][DATA_WIDTH+COEFF_WIDTH-1]}}, mult_result[2*i+1]};
+            // mult_result is (DATA_WIDTH + COEFF_WIDTH) = 36 bits = ACCUM_WIDTH,
+            // so no sign extension is needed. Direct assignment preserves the
+            // signed multiply result. (Fixes Vivado Synth 8-693 "zero replication
+            // count" warning from the original {0{sign_bit}} expression.)
+            add_l0[i] <= mult_result[2*i] + mult_result[2*i+1];
         end
     end
 end

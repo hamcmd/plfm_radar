@@ -103,9 +103,6 @@ wire clk_400m;
 wire [7:0] adc_data_cmos;  // 8-bit ADC data (CMOS, from ad9484_interface_400m)
 wire adc_valid;            // Data valid signal
 
-wire [7:0] cdc_data_cmos;  // 8-bit ADC data (CMOS)
-wire cdc_valid;            // Data valid signal
-
 // ADC power-down control (directly tie low = ADC always on)
 assign adc_pwdn = 1'b0;
 
@@ -121,18 +118,12 @@ ad9484_interface_400m adc (
 	.adc_dco_bufg(clk_400m)
 );
 
-cdc_adc_to_processing #(
-    .WIDTH(8),
-    .STAGES(3)
-)cdc(
-    .src_clk(clk_400m),
-    .dst_clk(clk_400m),
-    .reset_n(reset_n),
-    .src_data(adc_data_cmos),
-    .src_valid(adc_valid),
-    .dst_data(cdc_data_cmos),
-    .dst_valid(cdc_valid)
-);
+// NOTE: The cdc_adc_to_processing instance that was here used src_clk=dst_clk=clk_400m
+// (same clock domain — no crossing). Gray-code CDC on same-clock with fast-changing
+// ADC data corrupts samples because Gray coding only guarantees safe transfer of
+// values that change by 1 LSB at a time. The real 400MHz→100MHz CDC crossing is
+// handled inside ddc_400m_enhanced via CIC decimation + CDC_FIR instances.
+// Removed: cdc_adc_to_processing instance. ADC data now goes directly to DDC.
 
 // 2. DDC Input Interface
 wire signed [17:0] ddc_out_i;
@@ -145,9 +136,9 @@ ddc_400m_enhanced ddc(
     .clk_400m(clk_400m),           // 400MHz clock from ADC DCO
     .clk_100m(clk),           // 100MHz system clock //used by the 2 FIR
     .reset_n(reset_n),
-    .adc_data(cdc_data_cmos),     // ADC data at 400MHz (unsigned 0-255)
-    .adc_data_valid_i(cdc_valid),     // Valid at 400MHz
-    .adc_data_valid_q(cdc_valid),     // Valid at 400MHz
+    .adc_data(adc_data_cmos),     // ADC data at 400MHz (direct from ADC interface)
+    .adc_data_valid_i(adc_valid),     // Valid at 400MHz
+    .adc_data_valid_q(adc_valid),     // Valid at 400MHz
     .baseband_i(ddc_out_i), // I output at 100MHz
     .baseband_q(ddc_out_q), // Q output at 100MHz  
     .baseband_valid_i(ddc_valid_i),     // Valid at 100MHz

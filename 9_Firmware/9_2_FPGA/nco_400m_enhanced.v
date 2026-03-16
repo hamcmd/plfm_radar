@@ -217,7 +217,7 @@ DSP48E1 #(
     .D(25'b0),
     .CARRYIN(1'b0),
     // Control ports
-    .OPMODE(7'b0010011),         // Z=P (010), Y=0 (00), X=C_reg (11) → P = P + C
+    .OPMODE(7'b0101100),         // Z=P (010), Y=C (11), X=0 (00) → P = P + C
     .ALUMODE(4'b0000),           // Z + X + Y + CIN (standard add)
     .INMODE(5'b00000),
     .CARRYINSEL(3'b000),

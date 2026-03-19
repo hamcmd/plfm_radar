@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     test_bug1_timed_sync_init_ordering
+relocations:     []
+...

@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     test_bug6_timer_variable_collision
+relocations:     []
+...

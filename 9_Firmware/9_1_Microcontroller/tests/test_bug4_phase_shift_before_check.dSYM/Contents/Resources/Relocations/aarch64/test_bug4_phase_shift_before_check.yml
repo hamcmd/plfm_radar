@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     test_bug4_phase_shift_before_check
+relocations:     []
+...

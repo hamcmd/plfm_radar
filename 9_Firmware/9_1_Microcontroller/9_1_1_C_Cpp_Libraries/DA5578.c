@@ -1,4 +1,5 @@
 #include "DAC5578.h"
+#include "diag_log.h"
 #include <string.h>
 
 /**
@@ -17,7 +18,10 @@ bool DAC5578_Init(DAC5578_HandleTypeDef *hdac, I2C_HandleTypeDef *hi2c, uint8_t 
                   uint8_t resolution, GPIO_TypeDef *ldac_port, uint16_t ldac_pin,
                   GPIO_TypeDef *clr_port, uint16_t clr_pin) {
     
+    DIAG("PA", "DAC5578_Init: addr=0x%02X (shifted=0x%02X), res=%u", i2c_addr, i2c_addr << 1, resolution);
+    
     if (hdac == NULL || hi2c == NULL) {
+        DIAG_ERR("PA", "DAC5578_Init: NULL handle(s)");
         return false;
     }
     
@@ -34,24 +38,32 @@ bool DAC5578_Init(DAC5578_HandleTypeDef *hdac, I2C_HandleTypeDef *hi2c, uint8_t 
     
     /* Set LDAC high (inactive) and CLR high (normal operation) */
     if (ldac_port != NULL) {
+        DIAG("PA", "  LDAC pin -> HIGH (inactive)");
         HAL_GPIO_WritePin(ldac_port, ldac_pin, GPIO_PIN_SET);
     }
     
     if (clr_port != NULL) {
+        DIAG("PA", "  CLR pin -> HIGH (normal operation)");
         HAL_GPIO_WritePin(clr_port, clr_pin, GPIO_PIN_SET);
     }
 
     /* Reset the DAC and enable internal reference by default */
+    DIAG("PA", "  Resetting DAC5578...");
     bool success = DAC5578_Reset(hdac);
     if (success) {
+        DIAG("PA", "  Enabling internal reference...");
         success = DAC5578_SetInternalReference(hdac, true);
+    } else {
+        DIAG_ERR("PA", "  DAC5578_Reset FAILED");
     }
 
     /* Set the clear code in the device */
     if (success) {
+        DIAG("PA", "  Setting clear code to ZERO...");
         success = DAC5578_SetClearCode(hdac, hdac->clear_code);
     }
 
+    DIAG("PA", "DAC5578_Init: %s", success ? "OK" : "FAILED");
     return success;
 }
 
@@ -61,12 +73,16 @@ bool DAC5578_Init(DAC5578_HandleTypeDef *hdac, I2C_HandleTypeDef *hi2c, uint8_t 
   * @retval bool: true if successful, false otherwise
   */
 bool DAC5578_Reset(DAC5578_HandleTypeDef *hdac) {
+    DIAG("PA", "DAC5578_Reset: addr=0x%02X", hdac->i2c_addr);
     uint8_t buffer[3];
     buffer[0] = DAC5578_CMD_RESET;
     buffer[1] = 0x00;
     buffer[2] = 0x00;
 
     HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(hdac->hi2c, hdac->i2c_addr, buffer, 3, HAL_MAX_DELAY);
+    if (status != HAL_OK) {
+        DIAG_ERR("PA", "DAC5578_Reset: I2C transmit FAILED, HAL status=%d", (int)status);
+    }
     return (status == HAL_OK);
 }
 
@@ -123,12 +139,14 @@ bool DAC5578_UpdateChannel(DAC5578_HandleTypeDef *hdac, uint8_t channel) {
   */
 bool DAC5578_WriteAndUpdateChannelValue(DAC5578_HandleTypeDef *hdac, uint8_t channel, uint16_t value) {
     if (channel > 7) {
+        DIAG_ERR("PA", "DAC5578_WriteAndUpdate: channel %u out of range", channel);
         return false;
     }
 
     /* DAC5578 is 8-bit, so mask value */
     value &= 0xFF;
 
+    DIAG("PA", "DAC5578_WriteAndUpdate: addr=0x%02X ch=%u val=0x%02X (%u)", hdac->i2c_addr, channel, value, value);
     return DAC5578_CommandWrite(hdac, DAC5578_CMD_WRITE_UPDATE | (channel & 0x7), value);
 }
 
@@ -310,8 +328,11 @@ DAC5578_ClearCode_t DAC5578_GetClearCode(DAC5578_HandleTypeDef *hdac) {
   * @retval None
   */
 void DAC5578_ActivateClearPin(DAC5578_HandleTypeDef *hdac) {
+    DIAG_WARN("PA", "DAC5578_ActivateClearPin: CLR -> LOW (emergency clear), addr=0x%02X", hdac->i2c_addr);
     if (hdac->clr_port != NULL) {
         HAL_GPIO_WritePin(hdac->clr_port, hdac->clr_pin, GPIO_PIN_RESET);
+    } else {
+        DIAG_ERR("PA", "  CLR port is NULL -- cannot activate hardware clear!");
     }
 }
 
@@ -332,11 +353,14 @@ void DAC5578_DeactivateClearPin(DAC5578_HandleTypeDef *hdac) {
   * @retval None
   */
 void DAC5578_ClearOutputs(DAC5578_HandleTypeDef *hdac) {
+    DIAG_WARN("PA", "DAC5578_ClearOutputs: pulsing CLR pin, addr=0x%02X", hdac->i2c_addr);
     if (hdac->clr_port != NULL) {
         /* Generate a pulse on CLR pin (active low) */
         HAL_GPIO_WritePin(hdac->clr_port, hdac->clr_pin, GPIO_PIN_RESET);
         HAL_Delay(1); // Hold for at least 50ns (1ms is plenty)
         HAL_GPIO_WritePin(hdac->clr_port, hdac->clr_pin, GPIO_PIN_SET);
+    } else {
+        DIAG_ERR("PA", "  CLR port is NULL -- cannot pulse clear!");
     }
 }
 
@@ -366,6 +390,9 @@ bool DAC5578_CommandWrite(DAC5578_HandleTypeDef *hdac, uint8_t command, uint16_t
     buffer[2] = value & 0xFF;        // LSB (actual 8-bit data)
 
     HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(hdac->hi2c, hdac->i2c_addr, buffer, 3, HAL_MAX_DELAY);
+    if (status != HAL_OK) {
+        DIAG_ERR("PA", "DAC5578 I2C write FAILED: addr=0x%02X cmd=0x%02X HAL=%d", hdac->i2c_addr, command, (int)status);
+    }
     return (status == HAL_OK);
 }
 
@@ -382,16 +409,19 @@ bool DAC5578_CommandRead(DAC5578_HandleTypeDef *hdac, uint8_t command, uint16_t 
     /* First write the command to set up readback */
     HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(hdac->hi2c, hdac->i2c_addr, &command, 1, HAL_MAX_DELAY);
     if (status != HAL_OK) {
+        DIAG_ERR("PA", "DAC5578 I2C read setup FAILED: addr=0x%02X cmd=0x%02X HAL=%d", hdac->i2c_addr, command, (int)status);
         return false;
     }
 
     /* Then read 3 bytes back */
     status = HAL_I2C_Master_Receive(hdac->hi2c, hdac->i2c_addr, buffer, 3, HAL_MAX_DELAY);
     if (status != HAL_OK) {
+        DIAG_ERR("PA", "DAC5578 I2C read data FAILED: addr=0x%02X cmd=0x%02X HAL=%d", hdac->i2c_addr, command, (int)status);
         return false;
     }
 
     /* Extract the 8-bit value from the response */
     *value = buffer[2] & 0xFF;
+    DIAG("PA", "DAC5578_Read: addr=0x%02X cmd=0x%02X => 0x%02X", hdac->i2c_addr, command, *value);
     return true;
 }

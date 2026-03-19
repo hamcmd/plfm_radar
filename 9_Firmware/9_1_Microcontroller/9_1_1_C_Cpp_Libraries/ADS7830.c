@@ -1,4 +1,5 @@
 #include "ADS7830.h"
+#include "diag_log.h"
 #include <string.h>
 
 /**
@@ -13,7 +14,11 @@
 bool ADS7830_Init(ADS7830_HandleTypeDef *hadc, I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, 
                   ADS7830_SDMode_t sdmode, ADS7830_PDMode_t pdmode) {
     
+    DIAG("PA", "ADS7830_Init: addr=0x%02X (shifted=0x%02X), sdmode=%u, pdmode=%u",
+         i2c_addr, i2c_addr << 1, (unsigned)sdmode, (unsigned)pdmode);
+    
     if (hadc == NULL || hi2c == NULL) {
+        DIAG_ERR("PA", "ADS7830_Init: NULL handle(s)");
         return false;
     }
     
@@ -25,7 +30,10 @@ bool ADS7830_Init(ADS7830_HandleTypeDef *hadc, I2C_HandleTypeDef *hi2c, uint8_t 
     hadc->last_conversion_result = 0;
     
     /* Test communication by reading from a channel */
-    return (ADS7830_Measure_SingleEnded(hadc, 0) != 0xFF); // 0xFF indicates communication error
+    uint8_t test_read = ADS7830_Measure_SingleEnded(hadc, 0);
+    bool ok = (test_read != 0xFF);
+    DIAG("PA", "ADS7830_Init: test read ch0 = 0x%02X => %s", test_read, ok ? "OK" : "FAILED (0xFF)");
+    return ok;
 }
 
 /**
@@ -110,6 +118,7 @@ uint8_t ADS7830_Measure_SingleEnded(ADS7830_HandleTypeDef *hadc, uint8_t channel
     // Write config register to the ADC
     HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(hadc->hi2c, hadc->i2c_addr, &config, 1, HAL_MAX_DELAY);
     if (status != HAL_OK) {
+        DIAG_ERR("PA", "ADS7830 I2C transmit FAILED: addr=0x%02X ch=%u HAL=%d", hadc->i2c_addr, channel, (int)status);
         return 0xFF;
     }
 
@@ -120,6 +129,7 @@ uint8_t ADS7830_Measure_SingleEnded(ADS7830_HandleTypeDef *hadc, uint8_t channel
     uint8_t result = 0;
     status = HAL_I2C_Master_Receive(hadc->hi2c, hadc->i2c_addr, &result, 1, HAL_MAX_DELAY);
     if (status != HAL_OK) {
+        DIAG_ERR("PA", "ADS7830 I2C receive FAILED: addr=0x%02X ch=%u HAL=%d", hadc->i2c_addr, channel, (int)status);
         return 0xFF;
     }
     
@@ -179,6 +189,7 @@ int8_t ADS7830_Measure_Differential(ADS7830_HandleTypeDef *hadc, uint8_t channel
     // Write config register to the ADC
     HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(hadc->hi2c, hadc->i2c_addr, &config, 1, HAL_MAX_DELAY);
     if (status != HAL_OK) {
+        DIAG_ERR("PA", "ADS7830 diff I2C transmit FAILED: addr=0x%02X ch=%u HAL=%d", hadc->i2c_addr, channel, (int)status);
         return (int8_t)0x80;
     }
 
@@ -189,6 +200,7 @@ int8_t ADS7830_Measure_Differential(ADS7830_HandleTypeDef *hadc, uint8_t channel
     uint8_t raw_adc = 0;
     status = HAL_I2C_Master_Receive(hadc->hi2c, hadc->i2c_addr, &raw_adc, 1, HAL_MAX_DELAY);
     if (status != HAL_OK) {
+        DIAG_ERR("PA", "ADS7830 diff I2C receive FAILED: addr=0x%02X ch=%u HAL=%d", hadc->i2c_addr, channel, (int)status);
         return (int8_t)0x80;
     }
     

@@ -95,6 +95,7 @@ module radar_system_top_50t (
     wire [5:0]  dbg_range_bin_nc;
     wire [3:0]  system_status_nc;
 
+    (* DONT_TOUCH = "TRUE" *)
     radar_system_top u_core (
         // ----- Clocks & Reset -----
         .clk_100m               (clk_100m),
